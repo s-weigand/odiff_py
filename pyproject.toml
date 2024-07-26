@@ -1,0 +1,166 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = [
+  "hatchling",
+]
+
+[project]
+
+name = "odiff-py"
+description = "Odiff python wrapper"
+readme = "README.md"
+keywords = [
+  "compare",
+  "diff",
+  "image",
+  "odiff",
+]
+license = { file = "LICENSE" }
+
+authors = [
+  { name = "Sebastian Weigand", email = "s.weigand.phy@gmail.com" },
+]
+requires-python = ">=3.9"
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dynamic = [
+  "version",
+]
+
+dependencies = [
+  "apngasm-python>=1.3.1",
+  "pillow>=10.4",
+]
+optional-dependencies.dev = [
+  # dependencies to run hatch_build
+  "hatchling",
+  "httpx",
+  "odiff-py[docs,test]",
+]
+optional-dependencies.docs = [
+  "myst-parser>=2",
+  "numpydoc>=1.6",
+  "sphinx>=7",
+  "sphinx-copybutton>=0.5.2",
+  "sphinx-last-updated-by-git>=0.3.6",
+  "sphinx-rtd-theme>=1.3",
+  "sphinxcontrib-jquery>=4.1",         # Needed for the search to work Ref.: https://github.com/readthedocs/sphinx_rtd_theme/issues/1434
+]
+optional-dependencies.test = [
+  "coverage[toml]>=7.3.2",
+  "numpy",
+  "pluggy>=1.3",
+  "pytest>=7.4.3",
+  "pytest-cov>=4.1",
+  "pytest-env",
+]
+urls.Changelog = "https://odiff-py.readthedocs.io/en/latest/changelog.html"
+urls.Documentation = "https://odiff-py.readthedocs.io"
+urls.Homepage = "https://github.com/s-weigand/odiff-py"
+urls.Source = "https://github.com/s-weigand/odiff-py"
+urls.Tracker = "https://github.com/s-weigand/odiff-py/issues"
+scripts."odiff-py" = "odiff_py.__main__:main"
+
+[tool.hatch.version]
+path = "odiff_py/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [ "/odiff_py", "/tests" ]
+
+[tool.hatch.build.targets.bdist]
+include = [ "/odiff_py" ]
+
+# [tool.hatch.build.hooks.custom]
+[tool.hatch.build.targets.wheel.hooks.custom]
+dependencies = [
+  "httpx",
+  "importlib-metadata; python_version < '3.10'",
+]
+
+[tool.hatch.envs.default]
+features = [ "dev" ]
+post-install-commands = [ "python hatch_build.py" ]
+installer = "uv"
+python = "3.9"
+
+[tool.docformatter]
+black = true
+wrap-summaries = 99
+wrap-descriptions = 99
+
+[tool.pydoclint]
+skip-checking-short-docstrings = false
+style = 'numpy'
+exclude = '^(docs/|tests?/)'
+require-return-section-when-returning-nothing = false
+allow-init-docstring = true
+
+[tool.pytest.ini_options]
+addopts = [
+  "--cov=odiff_py",
+  "--cov-report=term",
+  "--cov-report=xml",
+  "--cov-report=html",
+  "--cov-config=pyproject.toml",
+]
+env = [
+  # prevent line wrapping in tests
+  "TERMINAL_WIDTH=500",
+  "_TYPER_FORCE_DISABLE_TERMINAL=1",
+  "_TYPER_STANDARD_TRACEBACK=1",
+]
+
+[tool.coverage.run]
+branch = true
+omit = [
+  'odiff_py/__init__.py',
+  'tests/*',
+  # comment the above line if you want to see if all tests did run
+]
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_lines = [
+  # Have to re-enable the standard pragma
+  'pragma: no cover',
+
+  # Don't complain about missing debug-only code:
+  'def __repr__',
+  'if self\.debug',
+
+  # Don't complain if tests don't hit defensive assertion code:
+  'raise AssertionError',
+  'raise NotImplementedError',
+
+  # Don't complain if non-runnable code isn't run:
+  'if 0:',
+  'if __name__ == .__main__.:',
+  # only accessible during typechecking
+  'if TYPE_CHECKING:',
+]
+
+[tool.mypy]
+exclude = "^docs/"
+ignore_missing_imports = true
+scripts_are_modules = true
+show_error_codes = true
+warn_unused_configs = true
+warn_unused_ignores = true
+strict_equality = true
+python_version = "3.9"
+
+# For now this is not used because pydoclint does not support toml when used with flake8
+
+[tool.interrogate]
+exclude = [ "docs", "tests" ]
+ignore-init-module = true
+fail-under = 100

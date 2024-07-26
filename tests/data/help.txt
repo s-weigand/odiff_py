@@ -1,0 +1,72 @@
+NAME
+       odiff - Find difference between 2 images.
+
+SYNOPSIS
+       odiff [OPTION]… [BASE] [COMPARING] [DIFF]
+
+DESCRIPTION
+       odiff is the fastest pixel-by-pixel image comparison tool.
+
+       Supported image types: .png, .jpg, .jpeg, .tiff
+
+ARGUMENTS
+       BASE
+           Path to base image
+
+       COMPARING
+           Path to comparing image
+
+       DIFF
+           Diff output path (.png only)
+
+OPTIONS
+       --antialiasing, --aa
+           With this flag enabled, antialiased pixels are not counted to the
+           diff of an image
+
+       --diff-color=VAL
+           Color used to highlight different pixels in the output (in hex
+           format e.g. #cd2cc9).
+
+       --dm, --diff-mask
+           Output only changed pixel over transparent background.
+
+       --fail-on-layout
+           Do not compare images and produce output if images layout is
+           different.
+
+       -i VAL, --ignore=VAL
+           An array of regions to ignore in the diff. One region looks like
+           "x1:y1-x2:y2". Multiple regions are separated with a ','.
+
+       --output-diff-lines
+           With this flag enabled, output result in case of different images
+           will output lines for all the different pixels
+
+       --parsable-stdout
+           Stdout parsable output
+
+       --reduce-ram-usage
+           With this flag enabled odiff will use less memory, but will be
+           slower in some cases.
+
+       -t THRESHOLD, --threshold=THRESHOLD (absent=0.1)
+           Color difference threshold (from 0 to 1). Less more precise.
+
+COMMON OPTIONS
+       --help[=FMT] (default=auto)
+           Show this help in format FMT. The value FMT must be one of auto,
+           pager, groff or plain. With auto, the format is pager or plain
+           whenever the TERM env var is dumb or undefined.
+
+       --version
+           Show version information.
+
+EXIT STATUS
+       odiff exits with:
+
+       0   on image match
+
+       21  on layout diff when --fail-on-layout
+
+       22  on image pixel difference

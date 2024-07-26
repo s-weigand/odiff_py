@@ -1,0 +1,24 @@
+{
+  "template": "https://github.com/s-weigand/cookiecutter-pypackage",
+  "commit": "e3fc94e41beb85fbca39242240315ef6d6a7dbc5",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "full_name": "Sebastian Weigand",
+      "email": "s.weigand.phy@gmail.com",
+      "github_username": "s-weigand",
+      "project_name": "odiff-py",
+      "project_slug": "odiff_py",
+      "project_slug_url": "odiff-py",
+      "project_short_description": "Odiff python wrapper",
+      "version": "0.0.1",
+      "command_line_interface": "typer",
+      "open_source_license": "Apache Software License",
+      "git_host_url": "https://github.com",
+      "install_pre_commit": "yes",
+      "_copy_without_render": ["docs/_templates/autosummary"],
+      "_template": "https://github.com/s-weigand/cookiecutter-pypackage"
+    }
+  },
+  "directory": null
+}
