@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import platform
 import stat
+from io import BytesIO
 from pathlib import Path
 from typing import Any
+from zipfile import ZipFile
 
 import httpx
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
@@ -14,12 +16,18 @@ from packaging.tags import sys_tags
 
 REPO_ROOT = Path(__file__).parent
 
-ODIFF_VERSION = "v3.1.1"
-REL_DEST_PATH = "odiff_py/bin/odiff.exe"
-ODIFF_BIN = REPO_ROOT / REL_DEST_PATH
+ODIFF_VERSION = (REPO_ROOT / ".odiff-version").read_text().strip()
+ODIFF_BIN = REPO_ROOT / "odiff_py/bin/odiff.exe"
+ODIFF_LIC = REPO_ROOT / "odiff_py/bin/LICENSE-odiff"
+
+EXTRA_HEADERS = {}
+# Needed for CI rate limits
+gh_token = os.getenv("GH_TOKEN")
+if gh_token is not None:
+    EXTRA_HEADERS["Authorization"] = f"Bearer {gh_token}"
 
 
-def get_release_assets(tag_name: str = ODIFF_VERSION) -> list[dict[str, Any]]:
+def get_release_assets(tag_name: str = ODIFF_VERSION) -> tuple[list[dict[str, Any]], str]:
     """Get list of assets for the release with tag ``tag_name``.
 
     Parameters
@@ -29,8 +37,8 @@ def get_release_assets(tag_name: str = ODIFF_VERSION) -> list[dict[str, Any]]:
 
     Returns
     -------
-    list[dict[str, Any]]
-        Assets of the release.
+    tuple[list[dict[str, Any]], str]
+        Assets of the release and zipball url.
 
     Raises
     ------
@@ -39,23 +47,20 @@ def get_release_assets(tag_name: str = ODIFF_VERSION) -> list[dict[str, Any]]:
     ValueError
         If response has an unexpected shape.
     """
-    headers = {}
-    # Needed for CI rate limits
-    gh_token = os.getenv("GH_TOKEN")
-    if gh_token is not None:
-        headers["Authorization"] = f"Bearer {gh_token}"
-    resp = httpx.get("https://api.github.com/repos/dmtrKovalenko/odiff/releases", headers=headers)
+    resp = httpx.get(
+        "https://api.github.com/repos/dmtrKovalenko/odiff/releases", headers=EXTRA_HEADERS
+    )
     if resp.status_code != 200:
         msg = f"Bad API response: {resp}"
         raise ValueError(msg)
     for release in resp.json():
         if release.get("tag_name", None) == tag_name:
-            return release["assets"]
+            return release["assets"], release["zipball_url"]
     msg = "API response has unexpected shape."
     raise ValueError(msg)
 
 
-def get_odiff_bin_download_url(tag_name: str = ODIFF_VERSION) -> str:
+def get_odiff_bin_download_url(tag_name: str = ODIFF_VERSION) -> tuple[str, str]:
     """Get download url for the system form the release page json payload.
 
     Parameters
@@ -65,8 +70,8 @@ def get_odiff_bin_download_url(tag_name: str = ODIFF_VERSION) -> str:
 
     Returns
     -------
-    str
-        Download url of the release asset for the current platform.
+    tuple[str, str]
+        Download url of the release asset for the current platform and zipball url.
 
     Raises
     ------
@@ -76,7 +81,7 @@ def get_odiff_bin_download_url(tag_name: str = ODIFF_VERSION) -> str:
     system = platform.system().lower()
     processor = platform.processor()
 
-    assets = get_release_assets(tag_name)
+    assets, zipball_url = get_release_assets(tag_name)
     for asset in assets:
         if (
             (system == "linux" and asset["name"] == "odiff-linux-x64.exe")
@@ -89,7 +94,7 @@ def get_odiff_bin_download_url(tag_name: str = ODIFF_VERSION) -> str:
                 )
             )
         ):
-            return asset["browser_download_url"]
+            return asset["browser_download_url"], zipball_url
     msg = f"Couldn't find odiff binary for your system:\n\t{system=}\n\t{processor}"
     raise ValueError(msg)
 
@@ -106,11 +111,15 @@ def download_odiff_bin(tag_name: str = ODIFF_VERSION) -> None:
         return
     print("Downloading odiff binary...")  # noqa: T201
     ODIFF_BIN.parent.mkdir(parents=True, exist_ok=True)
-    download_url = get_odiff_bin_download_url(tag_name)
-    resp = httpx.get(download_url, follow_redirects=True)
-    ODIFF_BIN.write_bytes(resp.content)
+    binary_url, zipball_url = get_odiff_bin_download_url(tag_name)
+    binary_resp = httpx.get(binary_url, follow_redirects=True, headers=EXTRA_HEADERS)
+    ODIFF_BIN.write_bytes(binary_resp.content)
     st = ODIFF_BIN.stat()
     ODIFF_BIN.chmod(st.st_mode | stat.S_IEXEC)
+    zipball_resp = httpx.get(zipball_url, follow_redirects=True, headers=EXTRA_HEADERS)
+    with ZipFile(BytesIO(zipball_resp.content)) as zipball:
+        base_dir = zipball.namelist()[0]
+        ODIFF_LIC.write_bytes(zipball.read(f"{base_dir}LICENSE"))
 
 
 class CustomBuildHook(BuildHookInterface):
@@ -118,18 +127,18 @@ class CustomBuildHook(BuildHookInterface):
 
     def initialize(self, _version: str, build_data: dict[str, Any]) -> None:  # noqa: DOC
         """Download odiff binary and update build data."""
-        # Linux tag is after many/musl; packaging tools are required to skip
-        # many/musl, see https://github.com/pypa/packaging/issues/160
-        tag = next(
-            iter(
-                t
-                for t in sys_tags()
-                if "manylinux" not in t.platform and "musllinux" not in t.platform
-            )
-        )
+        if any("musllinux" in t.platform for t in sys_tags()) and ODIFF_BIN.is_file() is False:
+            msg = "The upstream odiff project does currently not support 'musllinux'."
+            raise ValueError(msg)
+        tag = next(iter(t for t in sys_tags()))
         download_odiff_bin()
 
-        build_data["force_include"][ODIFF_BIN.as_posix()] = REL_DEST_PATH
+        build_data["force_include"][ODIFF_BIN.as_posix()] = ODIFF_BIN.relative_to(
+            REPO_ROOT
+        ).as_posix()
+        build_data["force_include"][ODIFF_LIC.as_posix()] = ODIFF_LIC.relative_to(
+            REPO_ROOT
+        ).as_posix()
         build_data["pure_python"] = False
         build_data["tag"] = f"py3-none-{tag.platform}"
 

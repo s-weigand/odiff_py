@@ -31,6 +31,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 dynamic = [
   "version",
@@ -92,6 +93,17 @@ post-install-commands = [ "python hatch_build.py" ]
 installer = "uv"
 python = "3.9"
 
+[tool.cibuildwheel]
+build = "cp39-*"
+archs = [ "auto64" ]
+skip = "*musllinux*"
+
+[tool.cibuildwheel.linux]
+before-all = ". /project/scripts/setup-ocamel-build-tools.sh"
+before-build = "sh /project/scripts/compile-odiff.sh"
+test-extras = [ "test" ]
+test-command = "pytest {project}/tests --override-ini='addopts='"
+
 [tool.docformatter]
 black = true
 wrap-summaries = 99
@@ -125,6 +137,7 @@ omit = [
   'odiff_py/__init__.py',
   'tests/*',
   # comment the above line if you want to see if all tests did run
+  'hatch_build.py',
 ]
 
 [tool.coverage.report]
