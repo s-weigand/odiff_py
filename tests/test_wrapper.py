@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from odiff_py.utils import APNG
+from odiff_py.utils import APNG, CHECKER_TRANSPARENCY_CSS
 from odiff_py.wrapper import CompareStatus
 from odiff_py.wrapper import DiffResult
 from odiff_py.wrapper import IgnoreArea
@@ -166,3 +166,11 @@ def test_result_md_repr_on_diff(default_test_args: DefaultTestArgs):
     result = odiff(diff_mask=True, output_diff_lines=True, **default_test_args)
     expected = (TEST_DATA / "diff-result.md").read_text()
     assert result._repr_markdown_() == expected
+
+
+def test_result_md_repr_on_diff_checker_board_propagation(default_test_args: DefaultTestArgs):
+    """Changing ``use_checker_transparency`` propagates to ``apng``."""
+    result = odiff(diff_mask=True, **default_test_args)
+    assert CHECKER_TRANSPARENCY_CSS in result._repr_markdown_()
+    result.use_checker_transparency = False
+    assert CHECKER_TRANSPARENCY_CSS not in result._repr_markdown_()

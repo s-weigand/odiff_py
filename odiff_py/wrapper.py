@@ -89,7 +89,9 @@ class DiffResult:
         ]
         if len(self.diff_lines) > 0:
             result_lines.append(f"|Diff Lines|{self.diff_lines}|")
-        result_lines.append(f"\n<br>{self.create_apng()}\n")
+        apng = self.create_apng()
+        apng.use_checker_transparency = self.use_checker_transparency
+        result_lines.append(f"\n<br>{apng}\n")
         return "\n".join(result_lines)
 
 
