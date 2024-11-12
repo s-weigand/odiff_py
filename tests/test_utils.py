@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from copy import copy
 from typing import TYPE_CHECKING
 
 import pytest
 from PIL import Image
 
 from odiff_py.utils import APNG
+from odiff_py.utils import load_image
 from odiff_py.utils import png_images_to_apng_bytes
 from odiff_py.utils import run_odiff
 from tests import TEST_DATA
@@ -54,9 +56,20 @@ def test_png_images_to_apng_bytes(tmp_path: Path, diff_images: list[Image.Image]
 
 
 def test_apng_from_images(diff_images: list[Image.Image]):
-    """Create ANPN instance from PIL images."""
+    """Create APNG instance from PIL images."""
     expected = (TEST_DATA / "tiger-compare.apng").read_bytes()
     assert APNG.from_images(diff_images).data == expected
+
+
+def test_apng_from_images_with_overlay(diff_images: list[Image.Image]):
+    """Creating APNG with overlay is the same as creating from an image with overlay."""
+    overlay = load_image(TEST_DATA / "overlay_red.png")
+    diff_image = copy(diff_images[0])
+    diff_image.paste(overlay, (0, 0), overlay)
+
+    expected = png_images_to_apng_bytes([diff_image])
+
+    assert APNG.from_images([diff_images[0], None], overlay_image=overlay).data == expected
 
 
 def test_apng_from_file():

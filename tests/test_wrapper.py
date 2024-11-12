@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import copy
 from typing import TYPE_CHECKING
 from typing import TypedDict
 from typing import cast
@@ -10,10 +11,13 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from odiff_py.utils import APNG, CHECKER_TRANSPARENCY_CSS
+from odiff_py.utils import APNG
+from odiff_py.utils import CHECKER_TRANSPARENCY_CSS
+from odiff_py.utils import load_image
 from odiff_py.wrapper import CompareStatus
 from odiff_py.wrapper import DiffResult
 from odiff_py.wrapper import IgnoreArea
+from odiff_py.wrapper import create_ignore_areas_overlay
 from odiff_py.wrapper import odiff
 from tests import TEST_DATA
 
@@ -174,3 +178,90 @@ def test_result_md_repr_on_diff_checker_board_propagation(default_test_args: Def
     assert CHECKER_TRANSPARENCY_CSS in result._repr_markdown_()
     result.use_checker_transparency = False
     assert CHECKER_TRANSPARENCY_CSS not in result._repr_markdown_()
+
+
+def test_ignore_areas_in_result(default_test_args: DefaultTestArgs):
+    """Ignore areas are in the result and all converted to ``IgnoreArea`` instances."""
+    result = odiff(ignore=[IgnoreArea(x1=1, y1=2, x2=3, y2=4), (5, 6, 7, 8)], **default_test_args)
+    assert result.ignore_areas == [
+        IgnoreArea(x1=1, y1=2, x2=3, y2=4),
+        IgnoreArea(x1=5, y1=6, x2=7, y2=8),
+    ]
+
+
+def test_create_ignore_areas_overlay_noop():
+    """If no ignore areas are provided the overlay is ``None``."""
+    assert create_ignore_areas_overlay(Image.new("RGB", (1, 1)), []) is None
+
+
+def test_create_ignore_areas_overlay(default_test_args: DefaultTestArgs):
+    """Basic overlay is as expected."""
+    overlay = create_ignore_areas_overlay(
+        load_image(default_test_args["base"]),
+        [IgnoreArea(600, 0, 880, 100), IgnoreArea(580, 20, 890, 200)],
+    )
+    assert overlay is not None
+    expected = TEST_DATA / "overlay_red.png"
+    diff_result = odiff(expected, overlay)
+    assert diff_result.status == CompareStatus.IMAGE_MATCH
+
+
+def test_ignore_areas_on_result_images(default_test_args: DefaultTestArgs):
+    """Only when the ``show_ignore_areas_overlay`` is ``True`` the ignore area overlay is shown.
+
+    Main goal is to verify that showing the overlay does not mutate the original image.
+    """
+    ignore_areas = [IgnoreArea(580, 20, 890, 200)]
+    overlay = create_ignore_areas_overlay(
+        load_image(default_test_args["base"]),
+        ignore_areas,
+    )
+    assert overlay is not None
+    diff_result = odiff(ignore=ignore_areas, diff_mask=True, **default_test_args)
+    assert diff_result.diff_image
+    assert diff_result.show_ignore_areas_overlay is True
+    assert diff_result.status == CompareStatus.PIXEL_DIFFERENCE
+
+    diff_result.show_ignore_areas_overlay = False
+    original_diff_image = copy(diff_result.diff_image)
+
+    assert (
+        odiff(diff_result.base_image, load_image(default_test_args["base"])).status
+        == CompareStatus.IMAGE_MATCH
+    )
+    assert (
+        odiff(diff_result.comparing_image, load_image(default_test_args["comparing"])).status
+        == CompareStatus.IMAGE_MATCH
+    )
+    odiff(diff_result.diff_image, original_diff_image).create_apng().save("fail.apng")
+    assert odiff(diff_result.diff_image, original_diff_image).status == CompareStatus.IMAGE_MATCH
+
+    diff_result.show_ignore_areas_overlay = True
+    expected_base = copy(diff_result.base_image)
+    expected_base.paste(overlay, (0, 0), overlay)
+    assert (
+        odiff(diff_result.base_image, expected_base, threshold=0.2).status
+        == CompareStatus.IMAGE_MATCH
+    )
+
+    expected_compare = copy(diff_result.comparing_image)
+    expected_compare.paste(overlay, (0, 0), overlay)
+    assert (
+        odiff(diff_result.comparing_image, expected_compare, threshold=0.2).status
+        == CompareStatus.IMAGE_MATCH
+    )
+
+    expected_diff = copy(diff_result.diff_image)
+    expected_diff.paste(overlay, (0, 0), overlay)
+    assert odiff(diff_result.diff_image, expected_diff).status == CompareStatus.IMAGE_MATCH
+
+    diff_result.show_ignore_areas_overlay = False
+    assert (
+        odiff(diff_result.base_image, load_image(default_test_args["base"])).status
+        == CompareStatus.IMAGE_MATCH
+    )
+    assert (
+        odiff(diff_result.comparing_image, load_image(default_test_args["comparing"])).status
+        == CompareStatus.IMAGE_MATCH
+    )
+    assert odiff(diff_result.diff_image, original_diff_image).status == CompareStatus.IMAGE_MATCH

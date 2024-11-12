@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
+from typing import Iterable
 from typing import NamedTuple
 
 from PIL import Image
+from PIL import ImageDraw
+from PIL.ImageColor import getrgb
 
 from odiff_py.utils import APNG
 from odiff_py.utils import load_image
@@ -41,6 +46,44 @@ class IgnoreArea(NamedTuple):
         return f"{self.x1}:{self.y1}-{self.x2}:{self.y2}"
 
 
+def create_ignore_areas_overlay(
+    original_image: Image.Image,
+    ignore_areas: list[IgnoreArea],
+    color: str = "red",
+    *,
+    fill: float = 0.2,
+) -> Image.Image | None:
+    """Create transparent overlay showing the ignore areas.
+
+    Parameters
+    ----------
+    original_image : Image.Image
+        Original image to create the overlay for.
+    ignore_areas : list[IgnoreArea]
+        Ignore areas to create an overlay for. The order determines which element is on top.
+        Top elements overwrite intersecting parts of bottom elements. The order of importance is
+        descending.
+    color : str
+        Border and fill color for ignore are elements, where the border color is taken as is and
+        the opacity of fillcolor is taken from the ``fill`` argument. Defaults to "red"
+    fill : float
+        Opacity of the ignore area filling. Defaults to 0.2
+
+    Returns
+    -------
+    Image.Image | None
+    """
+    if len(ignore_areas) == 0:
+        return None
+    overlay = Image.new("RGBA", original_image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    border_color = getrgb(color)
+    fill_color = (*border_color[:3], int(255 * fill))
+    for ignore_area in reversed(ignore_areas):
+        draw.rectangle(ignore_area, fill=fill_color if fill != 0 else None, outline=color, width=2)
+    return overlay
+
+
 @dataclass
 class DiffResult:
     """Result container for odiff comparison."""
@@ -52,13 +95,17 @@ class DiffResult:
     diff_pixel_count: int | None
     diff_percentage: float | None
     diff_lines: list[int]
+    ignore_areas: list[IgnoreArea]
     use_checker_transparency: bool = True
+    show_ignore_areas_overlay: bool = True
 
     def create_apng(
         self,
         *,
         delay_num: int = 500,
         delay_den: int = 1000,
+        color: str = "red",
+        fill: float = 0.2,
     ) -> APNG:
         """Create an apng from the images and their diff if there is any.
 
@@ -68,13 +115,46 @@ class DiffResult:
             The delay numerator for frames. Defaults to 500
         delay_den : int
             The delay denominator for frames. Defaults to 1000
+        color : str
+            Border and fill color for ignore area elements, where the border color is taken as is
+            and the opacity of fillcolor is taken from the ``fill`` argument. Defaults to "red"
+        fill : float
+            Opacity of the ignore area filling. Defaults to 0.2
 
         Returns
         -------
         APNG
         """
         images = [self.base_image, self.comparing_image, self.diff_image]
-        return APNG.from_images(images, delay_num=delay_num, delay_den=delay_den)
+        return APNG.from_images(
+            images,
+            delay_num=delay_num,
+            delay_den=delay_den,
+            overlay_image=self.create_ignore_areas_overlay(color=color, fill=fill)
+            if self.show_ignore_areas_overlay is True
+            else None,
+        )
+
+    def create_ignore_areas_overlay(
+        self, color: str = "red", fill: float = 0.2
+    ) -> Image.Image | None:
+        """Create ignore area overlay based on ``ignore_areas`` and ``base_image``.
+
+        Parameters
+        ----------
+        color : str
+            Border and fill color for ignore area elements, where the border color is taken as is
+            and the opacity of fillcolor is taken from the ``fill`` argument. Defaults to "red"
+        fill : float
+            Opacity of the ignore area filling. Defaults to 0.2
+
+        Returns
+        -------
+        Image.Image | None
+        """
+        return create_ignore_areas_overlay(
+            self.base_image, self.ignore_areas, color=color, fill=fill
+        )
 
     def _repr_markdown_(self) -> str:  # noqa:DOC
         """Magic method for rendering automatically in jupyter notebooks."""
@@ -94,6 +174,28 @@ class DiffResult:
         result_lines.append(f"\n<br>{apng}\n")
         return "\n".join(result_lines)
 
+    def __getattribute__(self, name: str) -> Any:  # noqa: DOC
+        """Get instance attributes."""
+        attr = super().__getattribute__(name)
+        if (
+            name
+            in {
+                "base_image",
+                "comparing_image",
+                "diff_image",
+            }
+            and len(self.ignore_areas) != 0
+            and self.show_ignore_areas_overlay is True
+            and isinstance(attr, Image.Image)
+        ):
+            base_image = attr if name == "base_image" else self.base_image
+            ignore_areas_overlay = create_ignore_areas_overlay(base_image, self.ignore_areas)
+            assert ignore_areas_overlay is not None
+            attr = copy(attr)
+            attr.paste(ignore_areas_overlay, (0, 0), ignore_areas_overlay)
+            return attr
+        return attr
+
 
 def _odiff(  # noqa: C901
     tmp_dir: Path,
@@ -105,7 +207,7 @@ def _odiff(  # noqa: C901
     diff_color: str = "#FF0000",
     diff_mask: bool = False,
     fail_on_layout: bool = False,
-    ignore: list[IgnoreArea | tuple[int, int, int, int]] | None = None,
+    ignore: Iterable[IgnoreArea | tuple[int, int, int, int]] | None = None,
     output_diff_lines: bool = False,
     reduce_ram_usage: bool = False,
     threshold: float = 0.1,
@@ -132,7 +234,7 @@ def _odiff(  # noqa: C901
         Output only changed pixel over transparent background. Defaults to False
     fail_on_layout : bool
         Do not compare images and produce output if images layout is different. Defaults to False
-    ignore : list[IgnoreArea  |  tuple[int, int, int, int]] | None
+    ignore : Iterable[IgnoreArea  |  tuple[int, int, int, int]] | None
         An array of regions to ignore in the diff. Defaults to None
     output_diff_lines : bool
         With this flag enabled, output result in case of different images will output lines for
@@ -153,6 +255,9 @@ def _odiff(  # noqa: C901
         If odiff throws an unexpected error.
     """
     cli_args = ["--parsable-stdout"]
+    ignore_areas: list[IgnoreArea] = (
+        [IgnoreArea(*ia) for ia in ignore] if ignore is not None else []
+    )
     if isinstance(base, Image.Image):
         base_path = tmp_dir / "base.png"
         base.save(base_path)
@@ -170,8 +275,8 @@ def _odiff(  # noqa: C901
         cli_args.append("--diff-mask")
     if fail_on_layout is True:
         cli_args.append("--fail-on-layout")
-    if ignore is not None:
-        cli_args.append(f"--ignore={','.join(IgnoreArea(*ia).to_region_str() for ia in ignore)}")
+    if len(ignore_areas) > 0:
+        cli_args.append(f"--ignore={','.join(ia.to_region_str() for ia in ignore_areas)}")
     if output_diff_lines is True:
         cli_args.append("--output-diff-lines")
     if reduce_ram_usage is True:
@@ -200,6 +305,7 @@ def _odiff(  # noqa: C901
         diff_pixel_count=int(diff_pixel_count) if diff_pixel_count != "" else None,
         diff_percentage=float(diff_percent) if diff_percent != "" else None,
         diff_lines=[int(line_nr) for line_nr in diff_lines.split(",") if line_nr.rstrip() != ""],
+        ignore_areas=ignore_areas,
     )
 
 
@@ -212,7 +318,7 @@ def odiff(
     diff_color: str = "#FF0000",
     diff_mask: bool = False,
     fail_on_layout: bool = False,
-    ignore: list[IgnoreArea | tuple[int, int, int, int]] | None = None,
+    ignore: Iterable[IgnoreArea | tuple[int, int, int, int]] | None = None,
     output_diff_lines: bool = False,
     reduce_ram_usage: bool = False,
     threshold: float = 0.1,
@@ -237,7 +343,7 @@ def odiff(
         Output only changed pixel over transparent background. Defaults to False
     fail_on_layout : bool
         Do not compare images and produce output if images layout is different. Defaults to False
-    ignore : list[IgnoreArea  |  tuple[int, int, int, int]] | None
+    ignore : Iterable[IgnoreArea | tuple[int, int, int, int]] | None
         An array of regions to ignore in the diff. Defaults to None
     output_diff_lines : bool
         With this flag enabled, output result in case of different images will output lines for
