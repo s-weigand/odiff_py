@@ -33,7 +33,9 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
-    "myst_parser",
+    "myst_nb",
+    "sphinx_copybutton",
+    "sphinx_rtd_theme",
 ]
 
 
@@ -44,11 +46,12 @@ autodoc_member_order = "bysource"
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+nb_render_markdown_format = "myst"
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
-source_suffix = ['.rst', '.md']
+source_suffix = {'.rst': 'restructuredtext', '.md': 'restructuredtext'}
 # source_suffix = '.rst'
 linkcheck_ignore = [
     r"https://github\.com/s-weigand/odiff-py/actions",

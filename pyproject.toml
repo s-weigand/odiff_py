@@ -48,8 +48,11 @@ optional-dependencies.dev = [
   "odiff-py[docs,test]",
 ]
 optional-dependencies.docs = [
-  "myst-parser>=2",
+  "jupyterlab>4",
+  "myst-nb>=1.1.1",                    # notebook docs
+  "myst-parser>=3",
   "numpydoc>=1.6",
+  "rich>=13.9.2",
   "sphinx>=7",
   "sphinx-copybutton>=0.5.2",
   "sphinx-last-updated-by-git>=0.3.6",

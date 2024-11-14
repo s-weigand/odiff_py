@@ -38,6 +38,16 @@ repos:
         exclude: "tests/data"
         additional_dependencies: ["prettier@3.3.3"]
 
+  # Notebook tools
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.0
+    hooks:
+      - id: nbstripout
+        args:
+          - "--drop-empty-cells"
+          - "--extra-keys"
+          - "cell.metadata.tags metadata.vscode metadata.papermill metadata.language_info.version cell.metadata.papermill"
+
   ###################
   #     LINTER      #
   ###################
