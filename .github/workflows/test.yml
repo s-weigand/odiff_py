@@ -171,7 +171,7 @@ jobs:
         run: hatch build -t sdist
 
       - name: 🚀 Publish package
-        uses: pypa/gh-action-pypi-publish@v1.12.2
+        uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           print-hash: true
           attestations: true
