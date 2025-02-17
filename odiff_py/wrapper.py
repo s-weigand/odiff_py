@@ -83,7 +83,7 @@ class DiffResult:
         result_lines = [
             "|Meaning|Value|",
             "|-------|-----|",
-            f"|Status|{self.status.name.replace('_',' ').capitalize()}|",
+            f"|Status|{self.status.name.replace('_', ' ').capitalize()}|",
             f"|Diff Pixel Count|{self.diff_pixel_count}|",
             f"|Diff Percentage|{self.diff_percentage:.2f}%|",
         ]
